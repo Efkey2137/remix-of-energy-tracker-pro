@@ -13,7 +13,7 @@ import { Plus, Zap, TrendingUp, Coins, CalendarDays, Trash2, Loader2 } from "luc
 import { toast } from "sonner";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
 
-const DASHBOARD_QUERY_TIMEOUT_MS = 10000;
+const DASHBOARD_QUERY_TIMEOUT_MS = 4000;
 
 function withTimeout<T>(promise: PromiseLike<T>, ms = DASHBOARD_QUERY_TIMEOUT_MS): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -35,7 +35,7 @@ function Dashboard() {
   const { t, lang } = useT();
   const [readings, setReadings] = useState<Reading[]>([]);
   const [rate, setRate] = useState(0.85);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) navigate({ to: "/auth", replace: true });
@@ -48,8 +48,8 @@ function Dashboard() {
       return;
     }
     let cancelled = false;
-    const load = async () => {
-      setLoading(true);
+    const load = async (showLoading = false) => {
+      if (showLoading) setLoading(true);
       try {
         const [{ data: rs, error: readingsError }, { data: prof, error: profileError }] = await withTimeout(Promise.all([
           supabase.from("meter_readings").select("*").order("reading_date", { ascending: false }),
@@ -66,7 +66,7 @@ function Dashboard() {
         if (!cancelled) setLoading(false);
       }
     };
-    load();
+    load(readings.length === 0);
     const ch = supabase
       .channel("readings")
       .on("postgres_changes", { event: "*", schema: "public", table: "meter_readings" }, () => load())
@@ -83,7 +83,7 @@ function Dashboard() {
   const fmt = (n: number) => n.toLocaleString(lang === "pl" ? "pl-PL" : "en-US", { maximumFractionDigits: 1 });
   const cost = (kwh: number) => (kwh * rate).toLocaleString(lang === "pl" ? "pl-PL" : "en-US", { maximumFractionDigits: 2 }) + " " + t.currency;
 
-  if (authLoading || loading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -96,7 +96,13 @@ function Dashboard() {
       <div className="space-y-6">
         <AddReadingDialog readings={readings} />
 
-        {!stats ? (
+        {loading && (
+          <div className="flex items-center justify-center py-6 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        )}
+
+        {!loading && !stats ? (
           <div className="rounded-2xl p-8 text-center border border-border" style={{ background: "var(--gradient-card)" }}>
             <Zap className="h-10 w-10 mx-auto text-primary mb-3 opacity-60" />
             <p className="text-sm text-muted-foreground">{t.noData}</p>
