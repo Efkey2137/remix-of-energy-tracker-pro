@@ -5,14 +5,11 @@ import { useAuth } from "@/lib/auth-context";
 import { useT } from "@/lib/i18n";
 import { AppShell } from "@/components/AppShell";
 import { computeStats, buildChartData, type Reading, daysBetween } from "@/lib/calc";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Zap, TrendingUp, Coins, CalendarDays, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 const UsageTrendChart = lazy(() => import("@/components/UsageTrendChart").then((module) => ({ default: module.UsageTrendChart })));
+const LazyAddReadingDialog = lazy(() => import("@/components/AddReadingDialog").then((module) => ({ default: module.AddReadingDialog })));
 
 const DASHBOARD_QUERY_TIMEOUT_MS = 4000;
 
@@ -37,6 +34,7 @@ function Dashboard() {
   const [readings, setReadings] = useState<Reading[]>([]);
   const [rate, setRate] = useState(0.85);
   const [loading, setLoading] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) navigate({ to: "/auth", replace: true });
@@ -95,7 +93,19 @@ function Dashboard() {
   return (
     <AppShell active="dashboard">
       <div className="space-y-6">
-        <AddReadingDialog readings={readings} />
+        <button
+          onClick={() => setAddDialogOpen(true)}
+          className="w-full rounded-2xl py-4 flex items-center justify-center gap-2 font-semibold text-primary-foreground"
+          style={{ background: "var(--gradient-primary)", boxShadow: "var(--shadow-glow)" }}
+        >
+          <Plus className="h-5 w-5" />
+          {t.addReading}
+        </button>
+        {addDialogOpen && (
+          <Suspense fallback={null}>
+            <LazyAddReadingDialog readings={readings} open={addDialogOpen} onOpenChange={setAddDialogOpen} showTrigger={false} />
+          </Suspense>
+        )}
 
         {loading && (
           <div className="flex items-center justify-center py-6 text-muted-foreground">
