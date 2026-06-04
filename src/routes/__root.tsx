@@ -7,7 +7,7 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -126,35 +126,6 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const [lang, setLangState] = useState<Lang>("pl");
-
-  useEffect(() => {
-    // hydrate language pref from profile when signed in
-    const load = async () => {
-      try {
-        const { data, error } = await supabase.auth.getSession();
-        
-        // Jeśli jest błąd albo brak sesji - przerywamy bezpiecznie
-        if (error || !data?.session) return;
-
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("language")
-          .eq("id", data.session.user.id)
-          .maybeSingle();
-          
-        if (prof?.language === "en" || prof?.language === "pl") {
-          setLangState(prof.language);
-        }
-      } catch (err) {
-        console.error("Wystąpił błąd podczas ładowania języka:", err);
-      }
-    };
-    
-    load();
-    const { data: sub } = supabase.auth.onAuthStateChange(() => load());
-    return () => sub.subscription.unsubscribe();
-  }, []);
-
 
   const setLang = (l: Lang) => {
     setLangState(l);
