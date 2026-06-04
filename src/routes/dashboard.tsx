@@ -52,7 +52,7 @@ function Dashboard() {
       if (showLoading) setLoading(true);
       try {
         const [{ data: rs, error: readingsError }, { data: prof, error: profileError }] = await withTimeout(Promise.all([
-          supabase.from("meter_readings").select("*").order("reading_date", { ascending: false }),
+          supabase.from("meter_readings").select("*").eq("user_id", user.id).order("reading_date", { ascending: false }).limit(250),
           supabase.from("profiles").select("kwh_rate").eq("id", user.id).maybeSingle(),
         ]));
         if (cancelled) return;
@@ -107,7 +107,7 @@ function Dashboard() {
             <Zap className="h-10 w-10 mx-auto text-primary mb-3 opacity-60" />
             <p className="text-sm text-muted-foreground">{t.noData}</p>
           </div>
-        ) : (
+        ) : stats ? (
           <>
             <div className="grid grid-cols-3 gap-3">
               <StatTile label={t.weekly} value={fmt(stats.weekly)} unit={t.kwh} />
@@ -148,7 +148,7 @@ function Dashboard() {
               </div>
             </div>
           </>
-        )}
+        ) : null}
 
         <div>
           <h2 className="text-sm font-semibold mb-2 px-1 text-muted-foreground uppercase tracking-wider">{t.history}</h2>
