@@ -10,6 +10,17 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2, LogOut } from "lucide-react";
 
+const SETTINGS_QUERY_TIMEOUT_MS = 10000;
+
+function withTimeout<T>(promise: PromiseLike<T>, ms = SETTINGS_QUERY_TIMEOUT_MS): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error("Settings request timed out")), ms);
+    Promise.resolve(promise)
+      .then(resolve, reject)
+      .finally(() => window.clearTimeout(timer));
+  });
+}
+
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "EnergyTracker — Ustawienia" }] }),
   component: SettingsPage,
@@ -28,12 +39,32 @@ function SettingsPage() {
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    if (!user) return;
-    supabase.from("profiles").select("kwh_rate").eq("id", user.id).maybeSingle().then(({ data }) => {
-      if (data?.kwh_rate != null) setRate(String(data.kwh_rate));
+    if (authLoading) return;
+    if (!user) {
       setLoaded(true);
-    });
-  }, [user]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoaded(false);
+
+    withTimeout(supabase.from("profiles").select("kwh_rate").eq("id", user.id).maybeSingle())
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) console.error("settings profile load failed", error);
+        if (data?.kwh_rate != null) setRate(String(data.kwh_rate));
+      })
+      .catch((err) => {
+        if (!cancelled) console.error("settings load failed", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, authLoading]);
 
   const saveRate = async (e: React.FormEvent) => {
     e.preventDefault();
