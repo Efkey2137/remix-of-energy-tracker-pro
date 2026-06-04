@@ -16,34 +16,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    
-    // Bezpieczne pobieranie sesji z obsługą błędów
+    let resolvedInitialSession = false;
+
+    const finishAuthCheck = (nextSession: Session | null) => {
+      if (!mounted) return;
+      setSession(nextSession);
+      resolvedInitialSession = true;
+      setLoading(false);
+    };
+
+    const fallbackTimer = window.setTimeout(() => {
+      if (!mounted || resolvedInitialSession) return;
+      console.warn("Auth session restore timed out");
+      finishAuthCheck(null);
+    }, 10000);
+
     supabase.auth.getSession()
       .then(({ data, error }) => {
-        if (!mounted) return;
         if (error) {
           console.error("Błąd pobierania sesji:", error);
-          setLoading(false);
-          return;
         }
-        setSession(data?.session ?? null);
-        setLoading(false);
+        finishAuthCheck(data?.session ?? null);
       })
       .catch((err) => {
-        if (!mounted) return;
         console.error("Nieoczekiwany błąd sesji:", err);
-        // To jest kluczowe! Zatrzymuje nieskończone ładowanie
-        setLoading(false);
+        finishAuthCheck(null);
       });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
-      if (!mounted) return;
-      setSession(s);
-      setLoading(false);
+      finishAuthCheck(s);
     });
 
     return () => {
       mounted = false;
+      window.clearTimeout(fallbackTimer);
       sub.subscription.unsubscribe();
     };
   }, []);
