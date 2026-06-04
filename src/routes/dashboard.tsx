@@ -13,6 +13,17 @@ import { Plus, Zap, TrendingUp, Coins, CalendarDays, Trash2, Loader2 } from "luc
 import { toast } from "sonner";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
 
+const DASHBOARD_QUERY_TIMEOUT_MS = 10000;
+
+function withTimeout<T>(promise: PromiseLike<T>, ms = DASHBOARD_QUERY_TIMEOUT_MS): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error("Dashboard data request timed out")), ms);
+    Promise.resolve(promise)
+      .then(resolve, reject)
+      .finally(() => window.clearTimeout(timer));
+  });
+}
+
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ title: "EnergyTracker — Pulpit" }] }),
   component: Dashboard,
@@ -38,12 +49,15 @@ function Dashboard() {
     }
     let cancelled = false;
     const load = async () => {
+      setLoading(true);
       try {
-        const [{ data: rs }, { data: prof }] = await Promise.all([
+        const [{ data: rs, error: readingsError }, { data: prof, error: profileError }] = await withTimeout(Promise.all([
           supabase.from("meter_readings").select("*").order("reading_date", { ascending: false }),
           supabase.from("profiles").select("kwh_rate").eq("id", user.id).maybeSingle(),
-        ]);
+        ]));
         if (cancelled) return;
+        if (readingsError) console.error("meter readings load failed", readingsError);
+        if (profileError) console.error("profile load failed", profileError);
         setReadings((rs ?? []) as Reading[]);
         if (prof?.kwh_rate != null) setRate(Number(prof.kwh_rate));
       } catch (e) {
