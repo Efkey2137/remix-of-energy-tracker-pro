@@ -31,19 +31,25 @@ function Dashboard() {
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    if (!user) return;
+    if (authLoading) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
     const load = async () => {
       try {
         const [{ data: rs }, { data: prof }] = await Promise.all([
           supabase.from("meter_readings").select("*").order("reading_date", { ascending: false }),
           supabase.from("profiles").select("kwh_rate").eq("id", user.id).maybeSingle(),
         ]);
+        if (cancelled) return;
         setReadings((rs ?? []) as Reading[]);
         if (prof?.kwh_rate != null) setRate(Number(prof.kwh_rate));
       } catch (e) {
         console.error("dashboard load failed", e);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     load();
@@ -53,9 +59,10 @@ function Dashboard() {
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => load())
       .subscribe();
     return () => {
+      cancelled = true;
       supabase.removeChannel(ch);
     };
-  }, [user]);
+  }, [user, authLoading]);
 
   const stats = useMemo(() => computeStats(readings), [readings]);
   const chartData = useMemo(() => buildChartData(readings), [readings]);
