@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted || resolvedInitialSession) return;
       console.warn("Auth session restore timed out");
       finishAuthCheck(null);
-    }, 10000);
+    }, 3000);
 
     supabase.auth.getSession()
       .then(({ data, error }) => {

@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2, LogOut } from "lucide-react";
 
-const SETTINGS_QUERY_TIMEOUT_MS = 10000;
+const SETTINGS_QUERY_TIMEOUT_MS = 4000;
 
 function withTimeout<T>(promise: PromiseLike<T>, ms = SETTINGS_QUERY_TIMEOUT_MS): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -86,7 +86,7 @@ function SettingsPage() {
     navigate({ to: "/auth", replace: true });
   };
 
-  if (authLoading || !loaded) {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -97,6 +97,12 @@ function SettingsPage() {
   return (
     <AppShell active="settings">
       <div className="space-y-6">
+        {!loaded && (
+          <div className="flex items-center justify-center py-6 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        )}
+
         <form onSubmit={saveRate} className="rounded-2xl p-5 border border-border space-y-3" style={{ background: "var(--gradient-card)" }}>
           <Label htmlFor="rate" className="text-base font-semibold">{t.kwhRate}</Label>
           <p className="text-xs text-muted-foreground">{t.currency} / {t.kwh}</p>
