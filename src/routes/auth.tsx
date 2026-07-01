@@ -9,6 +9,44 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Zap, Loader2 } from "lucide-react";
 
+const AUTH_TIMEOUT_MS = 10000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error("BACKEND_TIMEOUT"));
+    }, timeoutMs);
+
+    promise
+      .then(resolve)
+      .catch(reject)
+      .finally(() => window.clearTimeout(timeoutId));
+  });
+}
+
+function getFriendlyAuthError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (
+    message === "BACKEND_TIMEOUT" ||
+    message === "Load failed" ||
+    message === "Failed to fetch" ||
+    message.includes("NetworkError")
+  ) {
+    return "Nie można połączyć się z backendem. Backend jest prawdopodobnie zapauzowany — wznów Lovable Cloud i spróbuj ponownie.";
+  }
+
+  if (message.includes("Invalid login credentials")) {
+    return "Nieprawidłowy email lub hasło.";
+  }
+
+  if (message.includes("Email not confirmed")) {
+    return "Potwierdź email przed logowaniem.";
+  }
+
+  return message || "Nie udało się zalogować. Spróbuj ponownie.";
+}
+
 export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "EnergyTracker — Logowanie" }] }),
   component: AuthPage,
@@ -32,19 +70,25 @@ function AuthPage() {
     setBusy(true);
     try {
       if (mode === "in") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await withTimeout(
+          supabase.auth.signInWithPassword({ email, password }),
+          AUTH_TIMEOUT_MS,
+        );
         if (error) throw error;
       } else {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: window.location.origin },
-        });
+        const { error } = await withTimeout(
+          supabase.auth.signUp({
+            email,
+            password,
+            options: { emailRedirectTo: window.location.origin },
+          }),
+          AUTH_TIMEOUT_MS,
+        );
         if (error) throw error;
-        toast.success(t.readingSaved);
+        toast.success("Konto zostało utworzone. Możesz się teraz zalogować.");
       }
     } catch (err) {
-      toast.error((err as Error).message);
+      toast.error(getFriendlyAuthError(err));
     } finally {
       setBusy(false);
     }
