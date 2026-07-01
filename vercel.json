@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/public/keep-alive",
+      "schedule": "0 6 * * 1"
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",
