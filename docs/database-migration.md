@@ -24,35 +24,37 @@ npx supabase link --project-ref YOUR_PROJECT_REF
 npx supabase db push
 ```
 
-### Zachowanie kont i wszystkich danych
+### Zachowanie danych z Lovable Cloud
 
-Najbezpieczniejsza ścieżka to pełny backup PostgreSQL starego projektu i jego
-odtworzenie w nowym projekcie. Dzięki temu zachowane zostają także rekordy
-Supabase Auth, a użytkownicy nie muszą zakładać kont ponownie.
+Lovable Cloud nie udostępnia prostego przeniesienia projektu na konto Supabase.
+Oficjalna ścieżka polega na osobnym przeniesieniu schematu i danych:
 
-1. Wznów stary projekt w Lovable Cloud.
-2. Pobierz backup bazy z panelu projektu.
-3. Odtwórz backup do nowego Supabase zgodnie z instrukcją „Restore to a new
-   project” w panelu Supabase.
-4. Po odtworzeniu sprawdź historię migracji:
+1. W Lovable otwórz Cloud → Database.
+2. Wyeksportuj potrzebne tabele do CSV, w szczególności `profiles` i
+   `meter_readings`.
+3. Zastosuj migracje w nowym Supabase:
 
 ```bash
 npx supabase link --project-ref YOUR_PROJECT_REF
-npx supabase migration list
-```
-
-Jeżeli tabele już istnieją, ale dwie początkowe migracje nie są oznaczone jako
-zastosowane, wyrównaj historię bez ponownego tworzenia tabel, a następnie wgraj
-nową migrację:
-
-```bash
-npx supabase migration repair --status applied 20260604085437
-npx supabase migration repair --status applied 20260604085449
 npx supabase db push
 ```
 
-Przed importem sprawdź, czy w starej bazie nie ma dwóch odczytów tego samego
-użytkownika z tą samą datą. Nowy schemat celowo blokuje takie duplikaty.
+4. Załóż konta użytkowników w nowym Supabase. Lovable pozwala wyeksportować dane
+   użytkowników, ale nie ich hasła, więc użytkownicy muszą ustawić nowe hasła.
+5. W wyeksportowanych odczytach zastąp stare `user_id` identyfikatorami nowych
+   kont z Authentication → Users.
+6. Zaimportuj odczyty w Supabase przez Table Editor → `meter_readings` →
+   Insert → Import data from CSV.
+7. Ustaw stawkę za kWh i język w aplikacji lub zaktualizuj istniejące rekordy
+   `profiles`. Nie importuj profili bezpośrednio na rekordy utworzone już przez
+   rejestrację, bo ich klucze główne będą się powtarzać.
+
+Przy jednym użytkowniku najłatwiej założyć jedno nowe konto, skopiować jego UUID
+do kolumny `user_id` w CSV i dopiero wtedy wykonać import. Przy większej liczbie
+użytkowników warto przygotować osobny skrypt mapujący stare konta na nowe.
+
+Przed importem sprawdź też, czy nie ma dwóch odczytów tego samego użytkownika z
+tą samą datą. Nowy schemat celowo blokuje takie duplikaty.
 
 ## 3. Przełącz aplikację
 

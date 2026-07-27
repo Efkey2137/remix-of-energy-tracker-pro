@@ -37,7 +37,9 @@ Migracje tworzą:
 - automatyczną aktualizację profilu i Realtime.
 
 Pełna instrukcja przeniesienia istniejących danych znajduje się w
-[`docs/database-migration.md`](docs/database-migration.md).
+[`docs/database-migration.md`](docs/database-migration.md). Lovable Cloud nie
+przenosi haseł użytkowników do zewnętrznego Supabase, dlatego przy migracji
+istniejących kont trzeba zaplanować ustawienie nowych haseł.
 
 ## Konfiguracja Vercela
 
