@@ -10,8 +10,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
-import { AuthProvider } from "../lib/auth-context";
+import { AuthProvider, useAuth } from "../lib/auth-context";
 import { I18nContext, translations, type Lang } from "../lib/i18n";
 import { Toaster } from "../components/ui/sonner";
 import { supabase } from "../integrations/supabase/client";
@@ -41,9 +40,6 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
-  useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
-  }, [error]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -82,16 +78,31 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: "EnergyTracker — Tracker zużycia prądu" },
-      { name: "description", content: "Śledź odczyty licznika, analizuj zużycie i koszty energii elektrycznej." },
+      {
+        name: "description",
+        content: "Śledź odczyty licznika, analizuj zużycie i koszty energii elektrycznej.",
+      },
       { name: "theme-color", content: "#1a1d2e" },
       { property: "og:title", content: "EnergyTracker — Tracker zużycia prądu" },
-      { property: "og:description", content: "Śledź odczyty licznika, analizuj zużycie i koszty energii elektrycznej." },
+      {
+        property: "og:description",
+        content: "Śledź odczyty licznika, analizuj zużycie i koszty energii elektrycznej.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:title", content: "EnergyTracker — Tracker zużycia prądu" },
-      { name: "twitter:description", content: "Śledź odczyty licznika, analizuj zużycie i koszty energii elektrycznej." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/4d0a3616-7d27-4f81-b082-c159886ef95f/id-preview-1ea14e25--341bcec5-9716-4353-b754-1be06ffa96d6.lovable.app-1780595103097.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/4d0a3616-7d27-4f81-b082-c159886ef95f/id-preview-1ea14e25--341bcec5-9716-4353-b754-1be06ffa96d6.lovable.app-1780595103097.png" },
+      {
+        name: "twitter:description",
+        content: "Śledź odczyty licznika, analizuj zużycie i koszty energii elektrycznej.",
+      },
+      {
+        property: "og:image",
+        content: "https://home-power-log.vercel.app/icon-512.png",
+      },
+      {
+        name: "twitter:image",
+        content: "https://home-power-log.vercel.app/icon-512.png",
+      },
     ],
     links: [
       {
@@ -127,8 +138,14 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const [lang, setLangState] = useState<Lang>("pl");
 
+  useEffect(() => {
+    const stored = window.localStorage.getItem("energy-tracker-language");
+    if (stored === "pl" || stored === "en") setLangState(stored);
+  }, []);
+
   const setLang = (l: Lang) => {
     setLangState(l);
+    window.localStorage.setItem("energy-tracker-language", l);
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) {
         supabase.from("profiles").update({ language: l }).eq("id", data.user.id).then();
@@ -140,10 +157,38 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <I18nContext.Provider value={{ lang, t: translations[lang], setLang }}>
         <AuthProvider>
+          <LanguageProfileSync onLanguage={setLangState} />
           <Outlet />
           <Toaster theme="dark" position="top-center" />
         </AuthProvider>
       </I18nContext.Provider>
     </QueryClientProvider>
   );
+}
+
+function LanguageProfileSync({ onLanguage }: { onLanguage: (language: Lang) => void }) {
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user) return;
+
+    let cancelled = false;
+    supabase
+      .from("profiles")
+      .select("language")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled && data && (data.language === "pl" || data.language === "en")) {
+          window.localStorage.setItem("energy-tracker-language", data.language);
+          onLanguage(data.language);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, onLanguage]);
+
+  return null;
 }

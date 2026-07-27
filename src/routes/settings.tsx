@@ -33,6 +33,8 @@ function SettingsPage() {
   const [rate, setRate] = useState("0.85");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!authLoading && !user) navigate({ to: "/auth", replace: true });
@@ -47,15 +49,19 @@ function SettingsPage() {
 
     let cancelled = false;
     setLoaded(false);
+    setLoadError(false);
 
     withTimeout(supabase.from("profiles").select("kwh_rate").eq("id", user.id).maybeSingle())
       .then(({ data, error }) => {
         if (cancelled) return;
-        if (error) console.error("settings profile load failed", error);
+        if (error) throw error;
         if (data?.kwh_rate != null) setRate(String(data.kwh_rate));
       })
       .catch((err) => {
-        if (!cancelled) console.error("settings load failed", err);
+        if (!cancelled) {
+          console.error("settings load failed", err);
+          setLoadError(true);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoaded(true);
@@ -64,21 +70,26 @@ function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, authLoading]);
+  }, [user, authLoading, reloadKey]);
 
   const saveRate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     const num = Number(rate);
     if (!Number.isFinite(num) || num < 0) {
-      toast.error("Invalid rate");
+      toast.error(t.errorInvalidRate);
       return;
     }
     setBusy(true);
-    const { error } = await supabase.from("profiles").update({ kwh_rate: num }).eq("id", user.id);
-    setBusy(false);
-    if (error) toast.error(error.message);
-    else toast.success(t.settingsSaved);
+    try {
+      const { error } = await supabase.from("profiles").update({ kwh_rate: num }).eq("id", user.id);
+      if (error) toast.error(error.message);
+      else toast.success(t.settingsSaved);
+    } catch {
+      toast.error(t.backendUnavailable);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const logout = async () => {
@@ -103,11 +114,39 @@ function SettingsPage() {
           </div>
         )}
 
-        <form onSubmit={saveRate} className="rounded-2xl p-5 border border-border space-y-3" style={{ background: "var(--gradient-card)" }}>
-          <Label htmlFor="rate" className="text-base font-semibold">{t.kwhRate}</Label>
-          <p className="text-xs text-muted-foreground">{t.currency} / {t.kwh}</p>
+        {loaded && loadError && (
+          <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-5 text-center">
+            <p className="text-sm text-destructive">{t.loadFailed}</p>
+            <button
+              type="button"
+              onClick={() => setReloadKey((key) => key + 1)}
+              className="mt-3 text-sm font-semibold text-primary"
+            >
+              {t.retry}
+            </button>
+          </div>
+        )}
+
+        <form
+          onSubmit={saveRate}
+          className="rounded-2xl p-5 border border-border space-y-3"
+          style={{ background: "var(--gradient-card)" }}
+        >
+          <Label htmlFor="rate" className="text-base font-semibold">
+            {t.kwhRate}
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            {t.currency} / {t.kwh}
+          </p>
           <div className="flex gap-2">
-            <Input id="rate" type="number" step="0.01" min="0" value={rate} onChange={(e) => setRate(e.target.value)} />
+            <Input
+              id="rate"
+              type="number"
+              step="0.01"
+              min="0"
+              value={rate}
+              onChange={(e) => setRate(e.target.value)}
+            />
             <Button type="submit" disabled={busy}>
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {t.save}
@@ -115,7 +154,10 @@ function SettingsPage() {
           </div>
         </form>
 
-        <div className="rounded-2xl p-5 border border-border space-y-3" style={{ background: "var(--gradient-card)" }}>
+        <div
+          className="rounded-2xl p-5 border border-border space-y-3"
+          style={{ background: "var(--gradient-card)" }}
+        >
           <div className="text-base font-semibold">{t.language}</div>
           <div className="grid grid-cols-2 gap-2">
             {(["pl", "en"] as Lang[]).map((l) => (
@@ -123,7 +165,9 @@ function SettingsPage() {
                 key={l}
                 onClick={() => setLang(l)}
                 className={`rounded-lg py-2 text-sm font-semibold transition ${
-                  lang === l ? "text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
+                  lang === l
+                    ? "text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:text-foreground"
                 }`}
                 style={lang === l ? { background: "var(--gradient-primary)" } : undefined}
               >
@@ -133,7 +177,10 @@ function SettingsPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl p-5 border border-border" style={{ background: "var(--gradient-card)" }}>
+        <div
+          className="rounded-2xl p-5 border border-border"
+          style={{ background: "var(--gradient-card)" }}
+        >
           <div className="text-xs text-muted-foreground mb-2">{user?.email}</div>
           <Button variant="outline" onClick={logout} className="w-full">
             <LogOut className="h-4 w-4 mr-2" />
