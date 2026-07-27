@@ -5,6 +5,33 @@ export interface Reading {
   note: string | null;
 }
 
+export function toLocalDateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function findReadingBounds(readings: Reading[], date: string) {
+  let previous: Reading | null = null;
+  let next: Reading | null = null;
+
+  for (const reading of readings) {
+    if (
+      reading.reading_date < date &&
+      (!previous || reading.reading_date > previous.reading_date)
+    ) {
+      previous = reading;
+    }
+
+    if (reading.reading_date > date && (!next || reading.reading_date < next.reading_date)) {
+      next = reading;
+    }
+  }
+
+  return { previous, next };
+}
+
 export function daysBetween(a: string, b: string): number {
   const ms = new Date(b).getTime() - new Date(a).getTime();
   return Math.max(1, Math.round(ms / 86400000));

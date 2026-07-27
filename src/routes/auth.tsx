@@ -33,7 +33,7 @@ function getFriendlyAuthError(error: unknown) {
     message === "Failed to fetch" ||
     message.includes("NetworkError")
   ) {
-    return "Nie można połączyć się z backendem. Backend jest prawdopodobnie zapauzowany — wznów Lovable Cloud i spróbuj ponownie.";
+    return "Nie można połączyć się z bazą danych. Spróbuj ponownie za chwilę lub sprawdź konfigurację Supabase.";
   }
 
   if (message.includes("Invalid login credentials")) {
@@ -100,11 +100,15 @@ function AuthPage() {
         <button
           onClick={() => setLang("pl")}
           className={`px-2 py-1 rounded ${lang === "pl" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-        >PL</button>
+        >
+          PL
+        </button>
         <button
           onClick={() => setLang("en")}
           className={`px-2 py-1 rounded ${lang === "en" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-        >EN</button>
+        >
+          EN
+        </button>
       </div>
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
@@ -123,14 +127,33 @@ function AuthPage() {
           </p>
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-4 rounded-2xl p-6 border border-border" style={{ background: "var(--gradient-card)" }}>
+        <form
+          onSubmit={onSubmit}
+          className="space-y-4 rounded-2xl p-6 border border-border"
+          style={{ background: "var(--gradient-card)" }}
+        >
           <div>
             <Label htmlFor="email">{t.email}</Label>
-            <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1" />
+            <Input
+              id="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="mt-1"
+            />
           </div>
           <div>
             <Label htmlFor="password">{t.password}</Label>
-            <Input id="password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1" />
+            <Input
+              id="password"
+              type="password"
+              required
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-1"
+            />
           </div>
           <Button type="submit" className="w-full" disabled={busy}>
             {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

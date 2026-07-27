@@ -8,14 +8,21 @@ import { computeStats, buildChartData, type Reading, daysBetween } from "@/lib/c
 import { Plus, Zap, TrendingUp, Coins, CalendarDays, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-const UsageTrendChart = lazy(() => import("@/components/UsageTrendChart").then((module) => ({ default: module.UsageTrendChart })));
-const LazyAddReadingDialog = lazy(() => import("@/components/AddReadingDialog").then((module) => ({ default: module.AddReadingDialog })));
+const UsageTrendChart = lazy(() =>
+  import("@/components/UsageTrendChart").then((module) => ({ default: module.UsageTrendChart })),
+);
+const LazyAddReadingDialog = lazy(() =>
+  import("@/components/AddReadingDialog").then((module) => ({ default: module.AddReadingDialog })),
+);
 
 const DASHBOARD_QUERY_TIMEOUT_MS = 4000;
 
 function withTimeout<T>(promise: PromiseLike<T>, ms = DASHBOARD_QUERY_TIMEOUT_MS): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error("Dashboard data request timed out")), ms);
+    const timer = window.setTimeout(
+      () => reject(new Error("Dashboard data request timed out")),
+      ms,
+    );
     Promise.resolve(promise)
       .then(resolve, reject)
       .finally(() => window.clearTimeout(timer));
@@ -34,6 +41,8 @@ function Dashboard() {
   const [readings, setReadings] = useState<Reading[]>([]);
   const [rate, setRate] = useState(0.85);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -47,40 +56,72 @@ function Dashboard() {
       return;
     }
     let cancelled = false;
-    const load = async (showLoading = false) => {
+    const load = async (showLoading = true) => {
       if (showLoading) setLoading(true);
+      setLoadError(false);
       try {
-        const [{ data: rs, error: readingsError }, { data: prof, error: profileError }] = await withTimeout(Promise.all([
-          supabase.from("meter_readings").select("*").eq("user_id", user.id).order("reading_date", { ascending: false }).limit(250),
-          supabase.from("profiles").select("kwh_rate").eq("id", user.id).maybeSingle(),
-        ]));
+        const [{ data: rs, error: readingsError }, { data: prof, error: profileError }] =
+          await withTimeout(
+            Promise.all([
+              supabase
+                .from("meter_readings")
+                .select("*")
+                .eq("user_id", user.id)
+                .order("reading_date", { ascending: false })
+                .limit(250),
+              supabase.from("profiles").select("kwh_rate").eq("id", user.id).maybeSingle(),
+            ]),
+          );
         if (cancelled) return;
-        if (readingsError) console.error("meter readings load failed", readingsError);
-        if (profileError) console.error("profile load failed", profileError);
+        if (readingsError) throw readingsError;
+        if (profileError) throw profileError;
         setReadings((rs ?? []) as Reading[]);
         if (prof?.kwh_rate != null) setRate(Number(prof.kwh_rate));
       } catch (e) {
         console.error("dashboard load failed", e);
+        if (!cancelled) setLoadError(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
-    load(readings.length === 0);
+    load();
     const ch = supabase
-      .channel("readings")
-      .on("postgres_changes", { event: "*", schema: "public", table: "meter_readings" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => load())
+      .channel(`readings:${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "meter_readings",
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => load(false),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${user.id}`,
+        },
+        () => load(false),
+      )
       .subscribe();
     return () => {
       cancelled = true;
       supabase.removeChannel(ch);
     };
-  }, [user, authLoading]);
+  }, [user, authLoading, reloadKey]);
 
   const stats = useMemo(() => computeStats(readings), [readings]);
   const chartData = useMemo(() => buildChartData(readings), [readings]);
-  const fmt = (n: number) => n.toLocaleString(lang === "pl" ? "pl-PL" : "en-US", { maximumFractionDigits: 1 });
-  const cost = (kwh: number) => (kwh * rate).toLocaleString(lang === "pl" ? "pl-PL" : "en-US", { maximumFractionDigits: 2 }) + " " + t.currency;
+  const fmt = (n: number) =>
+    n.toLocaleString(lang === "pl" ? "pl-PL" : "en-US", { maximumFractionDigits: 1 });
+  const cost = (kwh: number) =>
+    (kwh * rate).toLocaleString(lang === "pl" ? "pl-PL" : "en-US", { maximumFractionDigits: 2 }) +
+    " " +
+    t.currency;
 
   if (authLoading) {
     return (
@@ -103,7 +144,19 @@ function Dashboard() {
         </button>
         {addDialogOpen && (
           <Suspense fallback={null}>
-            <LazyAddReadingDialog readings={readings} open={addDialogOpen} onOpenChange={setAddDialogOpen} showTrigger={false} />
+            <LazyAddReadingDialog
+              readings={readings}
+              open={addDialogOpen}
+              onOpenChange={setAddDialogOpen}
+              onSaved={(reading) =>
+                setReadings((current) =>
+                  [reading, ...current.filter((item) => item.id !== reading.id)].sort((a, b) =>
+                    b.reading_date.localeCompare(a.reading_date),
+                  ),
+                )
+              }
+              showTrigger={false}
+            />
           </Suspense>
         )}
 
@@ -113,8 +166,24 @@ function Dashboard() {
           </div>
         )}
 
-        {!loading && !stats ? (
-          <div className="rounded-2xl p-8 text-center border border-border" style={{ background: "var(--gradient-card)" }}>
+        {!loading && loadError && (
+          <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-5 text-center">
+            <p className="text-sm text-destructive">{t.loadFailed}</p>
+            <button
+              type="button"
+              onClick={() => setReloadKey((key) => key + 1)}
+              className="mt-3 text-sm font-semibold text-primary"
+            >
+              {t.retry}
+            </button>
+          </div>
+        )}
+
+        {!loading && !loadError && !stats ? (
+          <div
+            className="rounded-2xl p-8 text-center border border-border"
+            style={{ background: "var(--gradient-card)" }}
+          >
             <Zap className="h-10 w-10 mx-auto text-primary mb-3 opacity-60" />
             <p className="text-sm text-muted-foreground">{t.noData}</p>
           </div>
@@ -127,11 +196,22 @@ function Dashboard() {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <CostTile icon={<Coins className="h-4 w-4" />} label={`${t.monthly.toUpperCase()}`} value={cost(stats.monthly)} />
-              <CostTile icon={<TrendingUp className="h-4 w-4" />} label={`${t.yearly.toUpperCase()}`} value={cost(stats.yearly)} />
+              <CostTile
+                icon={<Coins className="h-4 w-4" />}
+                label={`${t.monthly.toUpperCase()}`}
+                value={cost(stats.monthly)}
+              />
+              <CostTile
+                icon={<TrendingUp className="h-4 w-4" />}
+                label={`${t.yearly.toUpperCase()}`}
+                value={cost(stats.yearly)}
+              />
             </div>
 
-            <div className="rounded-2xl p-4 border border-border" style={{ background: "var(--gradient-card)" }}>
+            <div
+              className="rounded-2xl p-4 border border-border"
+              style={{ background: "var(--gradient-card)" }}
+            >
               <div className="flex items-center gap-2 mb-3">
                 <CalendarDays className="h-4 w-4 text-primary" />
                 <h2 className="text-sm font-semibold">{t.trend}</h2>
@@ -146,26 +226,42 @@ function Dashboard() {
         ) : null}
 
         <div>
-          <h2 className="text-sm font-semibold mb-2 px-1 text-muted-foreground uppercase tracking-wider">{t.history}</h2>
+          <h2 className="text-sm font-semibold mb-2 px-1 text-muted-foreground uppercase tracking-wider">
+            {t.history}
+          </h2>
           <ul className="space-y-2">
             {readings.map((r, i) => {
               const next = readings[i + 1];
               const diff = next ? Number(r.value) - Number(next.value) : null;
               const days = next ? daysBetween(next.reading_date, r.reading_date) : null;
               return (
-                <li key={r.id} className="rounded-xl border border-border p-3 flex items-center justify-between" style={{ background: "var(--gradient-card)" }}>
+                <li
+                  key={r.id}
+                  className="rounded-xl border border-border p-3 flex items-center justify-between"
+                  style={{ background: "var(--gradient-card)" }}
+                >
                   <div>
-                    <div className="text-sm font-semibold">{Number(r.value).toLocaleString(lang === "pl" ? "pl-PL" : "en-US")} {t.kwh}</div>
+                    <div className="text-sm font-semibold">
+                      {Number(r.value).toLocaleString(lang === "pl" ? "pl-PL" : "en-US")} {t.kwh}
+                    </div>
                     <div className="text-xs text-muted-foreground">{r.reading_date}</div>
                     {diff != null && days != null && (
-                      <div className="text-xs text-primary mt-1">+{fmt(diff)} {t.kwh} · {days} {t.days}</div>
+                      <div className="text-xs text-primary mt-1">
+                        +{fmt(diff)} {t.kwh} · {days} {t.days}
+                      </div>
                     )}
+                    {r.note && <div className="text-xs text-muted-foreground mt-1">{r.note}</div>}
                   </div>
                   <button
                     onClick={async () => {
                       if (!confirm(t.confirmDelete)) return;
-                      const { error } = await supabase.from("meter_readings").delete().eq("id", r.id);
+                      const { error } = await supabase
+                        .from("meter_readings")
+                        .delete()
+                        .eq("id", r.id);
                       if (error) toast.error(error.message);
+                      else
+                        setReadings((current) => current.filter((reading) => reading.id !== r.id));
                     }}
                     className="p-2 text-muted-foreground hover:text-destructive transition"
                   >
@@ -181,7 +277,17 @@ function Dashboard() {
   );
 }
 
-function StatTile({ label, value, unit, highlight }: { label: string; value: string; unit: string; highlight?: boolean }) {
+function StatTile({
+  label,
+  value,
+  unit,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  highlight?: boolean;
+}) {
   return (
     <div
       className="rounded-2xl p-3 border border-border"
@@ -190,16 +296,31 @@ function StatTile({ label, value, unit, highlight }: { label: string; value: str
         boxShadow: highlight ? "var(--shadow-glow)" : undefined,
       }}
     >
-      <div className={`text-[10px] uppercase tracking-wider mb-1 ${highlight ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{label}</div>
-      <div className={`text-lg font-bold ${highlight ? "text-primary-foreground" : "text-foreground"}`}>{value}</div>
-      <div className={`text-[10px] ${highlight ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{unit}</div>
+      <div
+        className={`text-[10px] uppercase tracking-wider mb-1 ${highlight ? "text-primary-foreground/80" : "text-muted-foreground"}`}
+      >
+        {label}
+      </div>
+      <div
+        className={`text-lg font-bold ${highlight ? "text-primary-foreground" : "text-foreground"}`}
+      >
+        {value}
+      </div>
+      <div
+        className={`text-[10px] ${highlight ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+      >
+        {unit}
+      </div>
     </div>
   );
 }
 
 function CostTile({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="rounded-2xl p-4 border border-border" style={{ background: "var(--gradient-card)" }}>
+    <div
+      className="rounded-2xl p-4 border border-border"
+      style={{ background: "var(--gradient-card)" }}
+    >
       <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
         {icon}
         <span className="truncate">{label}</span>
