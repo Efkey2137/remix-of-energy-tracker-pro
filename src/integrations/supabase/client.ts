@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
+import { brokeredPreviewStorage } from "./previewAuthStorage";
 
 function createSupabaseClient() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -18,7 +19,7 @@ function createSupabaseClient() {
 
   return createClient<Database>(supabaseUrl, supabasePublishableKey, {
     auth: {
-      storage: typeof window !== "undefined" ? localStorage : undefined,
+      storage: brokeredPreviewStorage(),
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
